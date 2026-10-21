@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>乐声学练坊·歌唱课 AI 辅助学习工具</title>
+<style>
+  :root {
+    --bg:#f8fafc; --fg:#0f172a; --card:#ffffff; --border:#e2e8f0; --muted:#64748b;
+    --primary:#2E5984; --primary-fg:#ffffff; --accent:#C0764A;
+    --ok:#16a34a; --near:#ca8a04; --off:#dc2626;
+    --canvas-bg:#ffffff; --grid-l:rgba(120,140,160,0.18); --grid-s:rgba(120,140,160,0.35);
+  }
+  body.dark {
+    --bg:#020617; --fg:#e2e8f0; --card:#0f172a; --border:#1e293b; --muted:#94a3b8;
+    --canvas-bg:#020617; --grid-l:rgba(148,163,184,0.15); --grid-s:rgba(148,163,184,0.3);
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--fg); font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif; transition:background .2s,color .2s; }
+  .wrap { max-width:1100px; margin:0 auto; padding:20px 16px 40px; }
+  header { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:16px; }
+  h1 { font-size:25px; } h1 .note { color:var(--accent); }
+  .sub { font-size:13px; color:var(--muted); margin-top:4px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:16px; }
+  h2 { font-size:18px; margin-bottom:12px; color:var(--primary); }
+  h2 .step-no { display:inline-block; background:var(--primary); color:#fff; border-radius:8px; padding:2px 10px; margin-right:8px; font-size:14px; }
+  .btn { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--border); background:var(--card); color:var(--fg);
+         border-radius:8px; padding:8px 14px; font-size:14px; cursor:pointer; }
+  .btn:hover { filter:brightness(0.97); }
+  .btn.primary { background:var(--primary); color:var(--primary-fg); border-color:var(--primary); }
+  .btn.accent { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .btn.danger { background:var(--off); color:#fff; border-color:var(--off); }
+  .btn.sm { padding:5px 10px; font-size:13px; }
+  .btn:disabled { opacity:0.45; cursor:not-allowed; }
+  .muted { color:var(--muted); font-size:13px; }
+  .alert { background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; border-radius:10px; padding:10px 14px; margin-bottom:16px; font-size:14px; display:none; }
+  body.dark .alert { background:#450a0a; color:#fca5a5; border-color:#7f1d1d; }
+
+  /* 音频槽位 */
+  .slots { display:grid; grid-template-columns:repeat(2,1fr); gap:14px; }
+  @media (max-width:720px){ .slots{ grid-template-columns:1fr; } }
+  .slot { border:2px dashed var(--border); border-radius:12px; padding:14px; transition:border-color .15s; }
+  .slot.filled { border-style:solid; border-color:var(--primary); }
+  .slot.dragover { border-color:var(--accent); background:rgba(192,118,74,0.08); }
+  .slot-head { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .slot-head input { flex:1; min-width:0; font-weight:700; font-size:15px; border:0; background:transparent; color:var(--fg); border-bottom:1px dashed transparent; }
+  .slot-head input:hover, .slot-head input:focus { border-bottom-color:var(--muted); outline:none; }
+  .slot-body { font-size:13px; color:var(--muted); min-height:44px; }
+  .slot .file-name { font-weight:600; color:var(--fg); word-break:break-all; }
+  .slot-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .drop-tip { font-size:13px; color:var(--muted); margin-bottom:12px; }
+
+  /* 播放器 */
+  .player { display:flex; flex-direction:column; gap:12px; }
+  .now-playing { font-size:14px; }
+  .now-playing b { color:var(--accent); }
+  .p-controls { display:flex; flex-wrap:wrap; align-items:center; gap:14px; }
+  .p-controls input[type=range] { accent-color:var(--primary); }
+  #seekBar { flex:1; min-width:200px; }
+  .time { font-family:monospace; font-size:13px; color:var(--muted); white-space:nowrap; }
+  select, .btn { font-family:inherit; }
+  select { background:var(--card); color:var(--fg); border:1px solid var(--border); border-radius:8px; padding:7px 10px; font-size:14px; }
+  .ab-box { display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; }
+  .ab-label { font-size:14px; }
+  .ab-label b { font-family:monospace; }
+
+  /* 陪练区 */
+  .tutor-grid { display:grid; grid-template-columns:1fr 280px; gap:14px; }
+  @media (max-width:820px){ .tutor-grid{ grid-template-columns:1fr; } }
+  .chart-box { height:300px; border-radius:8px; background:var(--canvas-bg); overflow:hidden; border:1px solid var(--border); }
+  canvas { width:100%; height:100%; display:block; }
+  .readouts { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px; }
+  .readouts .box { border:1px solid var(--border); border-radius:10px; padding:10px 12px; }
+  .readouts .label { font-size:12px; color:var(--muted); }
+  .readouts .value { font-size:32px; font-weight:700; margin-top:4px; font-variant-numeric:tabular-nums; }
+  .v-ok{color:var(--ok)!important;} .v-near{color:var(--near)!important;} .v-off{color:var(--off)!important;} .v-primary{color:var(--primary)!important;}
+  .side-actions { display:flex; flex-direction:column; gap:10px; }
+  .report { white-space:pre-wrap; background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:12px; font-size:13px; line-height:1.8; margin-top:12px; max-height:280px; overflow:auto; }
+  .tip { font-size:12px; color:var(--muted); line-height:1.7; margin-top:10px; }
+
+  /* 任务卡 */
+  .tasks { display:grid; grid-template-columns:repeat(2,1fr); gap:14px; }
+  @media (max-width:720px){ .tasks{ grid-template-columns:1fr; } }
+  .tasks textarea { width:100%; font-size:13px; line-height:1.7; border:1px solid var(--border); border-radius:8px; background:var(--card); color:var(--fg); padding:10px; resize:vertical; }
+  .tasks .t-head { font-weight:700; font-size:14px; margin-bottom:6px; }
+
+  .switch-box { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--muted); }
+  .switch { position:relative; width:44px; height:24px; appearance:none; background:var(--border); border-radius:999px; cursor:pointer; transition:background .15s; }
+  .switch:checked { background:var(--primary); }
+  .switch::after { content:""; position:absolute; top:3px; left:3px; width:18px; height:18px; border-radius:50%; background:#fff; transition:left .15s; }
+  .switch:checked::after { left:23px; }
+  .guide p { font-size:13px; line-height:1.9; opacity:0.85; }
+
+  /* 评分卡 */
+  .score-card { display:none; border:1px solid var(--border); border-radius:10px; background:var(--bg); padding:14px; margin-top:12px; }
+  .score-head { display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  .stars { font-size:32px; letter-spacing:5px; color:#eab308; }
+  .score-total { font-size:16px; font-weight:700; color:var(--primary); }
+  .score-total b { font-size:28px; }
+  .score-bar-row { margin-top:10px; }
+  .score-bar-row .lbl { font-size:13px; display:flex; justify-content:space-between; }
+  .score-bar { height:10px; background:var(--border); border-radius:999px; overflow:hidden; margin-top:3px; }
+  .score-bar > div { height:100%; background:var(--primary); border-radius:999px; transition:width .4s; }
+  .score-bar > div.mid { background:#eab308; }
+  .score-bar > div.low { background:#dc2626; }
+  .score-sub { font-size:12px; color:var(--muted); margin-top:2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1><span class="note">♫</span> 乐声学练坊 · 歌唱课 AI 辅助学习工具</h1>
+      <p class="sub">歌唱课通用·任意曲目：插入音频 → 循环慢练 → AI 音准陪练 → 生成练唱报告 · 音频与数据只在本机，不上传</p>
+    </div>
+    <label class="switch-box">投影模式 <input type="checkbox" id="darkSwitch" class="switch" /></label>
+  </header>
+
+  <div id="alertBox" class="alert"></div>
+
+  <!-- ① 插入音频 -->
+  <div class="card">
+    <h2><span class="step-no">①</span>插入学习音频</h2>
+    <p class="drop-tip">把电脑里的音频文件（mp3 / wav / m4a / ogg）直接<strong>拖进任意槽位</strong>，或点击槽位选择文件。音频只在浏览器本地播放，不会上传。</p>
+    <div class="slots" id="slots"></div>
+  </div>
+
+  <!-- ② 播放器 -->
+  <div class="card">
+    <h2><span class="step-no">②</span>聆听与循环慢练</h2>
+    <div class="player">
+      <div class="now-playing">正在载入：<b id="nowPlaying">（尚未选择音频）</b></div>
+      <div class="p-controls">
+        <button id="playBtn" class="btn primary lg" disabled>▶ 播放</button>
+        <input type="range" id="seekBar" min="0" max="1000" value="0" disabled />
+        <span class="time" id="timeLbl">0:00 / 0:00</span>
+        <label class="muted">倍速
+          <select id="rateSel">
+            <option value="0.6">0.6×</option>
+            <option value="0.75">0.75×</option>
+            <option value="0.9">0.9×</option>
+            <option value="1" selected>1.0×</option>
+            <option value="1.25">1.25×</option>
+          </select>
+        </label>
+        <label class="muted">音量 <input type="range" id="volSlider" min="0" max="100" value="90" style="width:80px" /></label>
+      </div>
+      <div class="ab-box">
+        <span class="ab-label">A-B 循环练唱：</span>
+        <button id="setABtn" class="btn sm" disabled>设 A 点</button>
+        <button id="setBBtn" class="btn sm" disabled>设 B 点</button>
+        <span class="ab-label">区间 <b id="abLbl">未设置</b></span>
+        <button id="abClearBtn" class="btn sm">清除</button>
+        <button id="abToggleBtn" class="btn sm" disabled>循环：关</button>
+        <span class="muted" style="font-size:12px">用法：播放到句首按“设 A 点”，播放到句尾按“设 B 点”，打开循环即可逐句精练</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ③ AI 陪练 -->
+  <div class="card">
+    <h2><span class="step-no">③</span>AI 音准陪练（实时曲线＋练唱报告）</h2>
+    <div class="tutor-grid">
+      <div>
+        <div class="chart-box"><canvas id="chart"></canvas></div>
+        <p class="tip">提示：陪练时建议<strong>戴耳机</strong>播放伴奏，或先听一遍原曲再清唱——音箱外放会被麦克风收进去，干扰曲线。曲线平稳＝气息有支撑；读数变绿＝音准在线。</p>
+      </div>
+      <div class="side-actions">
+        <button id="micBtn" class="btn primary">🎙 开启麦克风</button>
+        <div class="readouts">
+          <div class="box"><div class="label">当前音高</div><div class="value" id="roNote">—</div></div>
+          <div class="box"><div class="label">音分偏差</div><div class="value" id="roCents">—</div><div class="label">±25 音分内为绿（准）</div></div>
+        </div>
+        <button id="coachBtn" class="btn accent" disabled>● 开始练唱记录</button>
+        <label class="muted" style="font-size:13px; display:flex; align-items:center; gap:6px">
+          <input type="checkbox" id="accompChk" checked /> 练唱时自动播放伴奏（取“纯伴奏”槽位）
+        </label>
+        <button id="shotBtn" class="btn" disabled>📷 保存曲线截图</button>
+        <div class="slider-box" style="display:flex;align-items:center;gap:8px;font-size:14px">
+          <span class="muted">视野</span><input type="range" id="winSlider" min="6" max="30" step="2" value="12" style="width:90px" />
+          <output id="winOut" class="muted">12s</output>
+        </div>
+      </div>
+    </div>
+    <div id="scoreCard" class="score-card">
+      <div class="score-head">
+        <span class="stars" id="scoreStars"></span>
+        <span class="score-total">练唱总分 <b id="scoreTotal">—</b> / 100</span>
+        <span class="muted" style="font-size:12px">规则评分：音准稳定率 · 平均偏差 · 音量均匀 · 演唱完整</span>
+      </div>
+      <div class="score-bar-row"><div class="lbl"><span>音准稳定（±25 音分占比）</span><b id="sc1">—</b></div><div class="score-bar"><div id="bar1" style="width:0"></div></div><div class="score-sub" id="sc1sub"></div></div>
+      <div class="score-bar-row"><div class="lbl"><span>音准精度（平均偏差越小越高）</span><b id="sc2">—</b></div><div class="score-bar"><div id="bar2" style="width:0"></div></div><div class="score-sub" id="sc2sub"></div></div>
+      <div class="score-bar-row"><div class="lbl"><span>音量均匀（与中位数偏差 ≤35% 占比）</span><b id="sc3">—</b></div><div class="score-bar"><div id="bar3" style="width:0"></div></div><div class="score-sub" id="sc3sub"></div></div>
+      <div class="score-bar-row"><div class="lbl"><span>演唱完整（有声帧占比）</span><b id="sc4">—</b></div><div class="score-bar"><div id="bar4" style="width:0"></div></div><div class="score-sub" id="sc4sub"></div></div>
+    </div>
+    <div id="reportBox" class="report" style="display:none"></div>
+    <div id="reportActions" style="display:none; margin-top:10px; display:none; gap:10px; flex-wrap:wrap">
+      <button id="copyReportBtn" class="btn sm">📋 复制报告</button>
+      <span class="muted" style="font-size:12px">报告由本机规则依据练唱数据生成，仅作自评参考——AI 是助手，判断在人。</span>
+    </div>
+  </div>
+
+  <!-- ④ 学习任务卡 -->
+  <div class="card">
+    <h2><span class="step-no">④</span>学习任务卡（可编辑，可导出）</h2>
+    <div class="tasks" id="tasks"></div>
+    <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; align-items:center">
+      <button id="exportTasksBtn" class="btn">📄 导出学习单（txt）</button>
+      <span class="muted" style="font-size:12px">默认任务为示例，可点击修改为任意歌唱课内容</span>
+    </div>
+  </div>
+
+  <!-- 说明 -->
+  <div class="card guide">
+    <h2>课堂使用说明</h2>
+    <p>· 全流程无需联网、无需账号：音频从本机插入，练唱数据只存在浏览器内存，关闭页面即清除。</p>
+    <p>· 典型流程：插入学唱音频 → 原曲欣赏 1 遍（设 A-B 循环听难句）→ 学生分句慢练（0.75×）→ 开麦克风“练唱记录”（自动播放“纯伴奏”槽位，建议戴耳机避免回声）→ 结束即出星级评分与练唱报告，对照曲线说一处进步与一处待改进。</p>
+    <p>· 换班级使用：移除旧音频、点“清空练唱数据”即可，任务卡内容会保留在页面中。</p>
+    <p>· 若麦克风无法开启：请用 Chrome / Edge 打开，并在地址栏允许麦克风权限。</p>
+  </div>
+  <footer style="text-align:center; color:var(--muted); font-size:12px; padding:8px 0 4px">
+    乐声学练坊 v1.0 · 浙江省尹丹红名师工作室「智乐工坊」研发 · 仅供课堂教学使用 · 页面离线可用
+  </footer>
+</div>
+
+<audio id="player"></audio>
+
+<script>
+"use strict";
+/* ================= 音高检测（与乐声可视化工具同源算法） ================= */
+function centsOff(freq){ if(!isFinite(freq)||freq<=0) return null; const exact=69+12*Math.log2(freq/440); const midi=Math.round(exact); return { midi, cents: Math.round((exact-midi)*100) }; }
+function midiToNote(midi){ const names=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"]; return names[((midi%12)+12)%12]+(Math.floor(midi/12)-1); }
+function detectPitch(buf, sampleRate, minFreq, maxFreq){
+  if(minFreq===undefined) minFreq=65; if(maxFreq===undefined) maxFreq=1200;
+  const n=buf.length; if(n<512) return null;
+  let rms=0; for(let i=0;i<n;i++) rms+=buf[i]*buf[i]; rms=Math.sqrt(rms/n);
+  if(rms<0.012) return null;
+  const minLag=Math.floor(sampleRate/maxFreq), maxLag=Math.min(Math.floor(sampleRate/minFreq), n-1);
+  const size=maxLag-minLag+1, corr=new Float32Array(size);
+  let vMax=0;
+  for(let lag=minLag;lag<=maxLag;lag++){
+    let sum=0,norm=0;
+    for(let i=0;i<n-lag;i++){ sum+=buf[i]*buf[i+lag]; norm+=buf[i]*buf[i]+buf[i+lag]*buf[i+lag]; }
+    const v=(2*sum)/(norm+1e-10); corr[lag-minLag]=v; if(v>vMax) vMax=v;
+  }
+  if(vMax<0.5) return null;
+  let bestLag=-1,bestVal=0; const threshold=vMax*0.9;
+  for(let i=1;i<size-1;i++){ if(corr[i]>=corr[i-1]&&corr[i]>=corr[i+1]&&corr[i]>=threshold){ bestLag=i+minLag; bestVal=corr[i]; break; } }
+  if(bestLag<0){ for(let i=0;i<size;i++){ if(corr[i]===vMax){ bestLag=i+minLag; bestVal=corr[i]; break; } } }
+  if(bestLag<0) return null;
+  const x0=bestLag>minLag?bestLag-1:bestLag, x2=bestLag<maxLag?bestLag+1:bestLag;
+  const lagA=x0===bestLag?bestVal:corr[x0-minLag], lagC=x2===bestLag?bestVal:corr[x2-minLag];
+  const a=(lagA+lagC-2*bestVal)/2, b=(lagC-lagA)/2;
+  if(a!==0){ const shift=b/(2*a); if(Math.abs(shift)<1) return sampleRate/(bestLag+shift); }
+  return sampleRate/bestLag;
+}
+
+/* ================= 状态 ================= */
+let dark=false, windowSec=12, micRunning=false;
+let frames=[], ring=[];
+let coach={ active:false, frames:[] };
+const COLORS={ ok:"#22c55e", near:"#eab308", off:"#ef4444" };
+let GRID_L="rgba(120,140,160,0.18)", GRID_S="rgba(120,140,160,0.35)";
+
+/* ================= 音频槽位 ================= */
+const DEFAULT_SLOTS=[
+  { name:"原曲欣赏", task:"聆听任务：\n1. 闭眼听一遍，用一个词写下歌曲的意境（如：空灵、遥远、忧伤）。\n2. 第二遍听：旋律是连贯的还是跳跃的？换气多不多？\n3. 注意歌手的声音位置：亮还是暗？轻还是重？" },
+  { name:"纯伴奏", task:"练唱任务：\n1. 先随伴奏用“m”哼鸣全曲一遍，手画旋律线。\n2. 用 A-B 循环逐句练：难句设区间，0.75 倍速慢练 3 遍再回原速。\n3. 带词演唱：咬字轻柔、元音拉长、辅音轻带。" },
+  { name:"小组录音", task:"评议任务：\n1. 播放本组录音，互相点评：音准、节奏、音色各说一条优点和一条建议。\n2. 对照 AI 练唱报告，确认问题是否一致。\n3. 商定下节课前本组重点练哪一句。" },
+];
+const slotsEl=document.getElementById("slots");
+const slotState=[];
+DEFAULT_SLOTS.forEach(function(def, i){ slotState.push({ name:def.name, url:null, file:null, duration:0 }); });
+
+function fmtTime(s){ s=Math.max(0,Math.floor(s)); return Math.floor(s/60)+":"+String(s%60).padStart(2,"0"); }
+
+function renderSlots(){
+  slotsEl.innerHTML="";
+  slotState.forEach(function(st, i){
+    const div=document.createElement("div");
+    div.className="slot"+(st.url?" filled":"");
+    div.innerHTML=
+      '<div class="slot-head"><input value="'+st.name.replace(/"/g,"&quot;")+'" aria-label="槽位名称" />'+
+      '<span class="slot-tag"></span></div>'+
+      '<div class="slot-body">'+
+        (st.url
+          ? '<div class="file-name">🎵 '+st.file+'</div><div>时长 '+fmtTime(st.duration)+'　<a href="javascript:void 0" class="change-link muted" style="font-size:12px">点击替换</a></div>'
+          : '<div>点击选择文件，或把音频文件拖到这里</div>')+
+      '</div>'+
+      '<div class="slot-actions">'+
+        (st.url?'<button class="btn sm load-btn" data-i="'+i+'">▶ 载入播放器</button><button class="btn sm remove-btn" data-i="'+i+'">✕ 移除</button>':"")+
+      '</div>';
+    div.querySelector("input").addEventListener("input",function(e){ st.name=e.target.value; renderTasks(); });
+    slotsEl.appendChild(div);
+
+    function pickFile(){
+      const inp=document.createElement("input");
+      inp.type="file"; inp.accept="audio/*";
+      inp.addEventListener("change",function(){ if(inp.files&&inp.files[0]) loadFile(i, inp.files[0]); });
+      inp.click();
+    }
+    div.addEventListener("click",function(e){
+      if(e.target.closest(".load-btn")){ loadIntoPlayer(i); return; }
+      if(e.target.closest(".remove-btn")){ removeSlot(i); return; }
+      if(e.target.closest("input")||e.target.closest(".change-link")||(!st.url)) pickFile();
+    });
+    div.addEventListener("dragover",function(e){ e.preventDefault(); div.classList.add("dragover"); });
+    div.addEventListener("dragleave",function(){ div.classList.remove("dragover"); });
+    div.addEventListener("drop",function(e){
+      e.preventDefault(); div.classList.remove("dragover");
+      const f=e.dataTransfer.files&&e.dataTransfer.files[0];
+      if(f) loadFile(i, f);
+    });
+  });
+}
+function loadFile(i, file){
+  const st=slotState[i];
+  if(st.url) URL.revokeObjectURL(st.url);
+  st.url=URL.createObjectURL(file); st.file=file.name; st.duration=0;
+  const probe=document.createElement("audio");
+  probe.preload="metadata"; probe.src=st.url;
+  probe.addEventListener("loadedmetadata",function(){ st.duration=probe.duration||0; renderSlots(); });
+  renderSlots();
+}
+function removeSlot(i){
+  const st=slotState[i];
+  if(st.url) URL.revokeObjectURL(st.url);
+  st.url=null; st.file=null; st.duration=0;
+  renderSlots();
+}
+renderSlots();
+
+/* ================= 播放器 ================= */
+const player=document.getElementById("player");
+const playBtn=document.getElementById("playBtn"), seekBar=document.getElementById("seekBar"),
+      timeLbl=document.getElementById("timeLbl"), nowPlaying=document.getElementById("nowPlaying");
+let currentSlot=-1, loopA=null, loopB=null, loopOn=false, seeking=false;
+
+function loadIntoPlayer(i){
+  currentSlot=i;
+  const st=slotState[i];
+  player.src=st.url; player.load();
+  player.playbackRate=+document.getElementById("rateSel").value;
+  player.volume=+document.getElementById("volSlider").value/100;
+  nowPlaying.textContent=st.name+"（"+st.file+"）";
+  playBtn.disabled=false; seekBar.disabled=false;
+  ["setABtn","setBBtn","abToggleBtn"].forEach(function(id){ document.getElementById(id).disabled=false; });
+  updateAB(); updateTimeUI();
+}
+playBtn.addEventListener("click",function(){
+  if(player.paused){ player.play().catch(function(){}); } else player.pause();
+});
+player.addEventListener("play",function(){ playBtn.textContent="⏸ 暂停"; });
+player.addEventListener("pause",function(){ playBtn.textContent="▶ 播放"; });
+player.addEventListener("ended",function(){ playBtn.textContent="▶ 播放"; });
+player.addEventListener("timeupdate",function(){
+  if(loopOn&&loopA!==null&&loopB!==null&&player.currentTime>=loopB) player.currentTime=loopA;
+  if(!seeking) updateTimeUI();
+});
+player.addEventListener("loadedmetadata",function(){ if(currentSlot>=0){ slotState[currentSlot].duration=player.duration; updateTimeUI(); } });
+function updateTimeUI(){
+  const d=player.duration||0, c=player.currentTime||0;
+  timeLbl.textContent=fmtTime(c)+" / "+fmtTime(d);
+  if(d>0&&!seeking) seekBar.value=Math.round(c/d*1000);
+}
+setInterval(updateTimeUI, 300);
+seekBar.addEventListener("input",function(){ seeking=true; if(player.duration) timeLbl.textContent=fmtTime(player.duration*this.value/1000)+" / "+fmtTime(player.duration); });
+seekBar.addEventListener("change",function(){ if(player.duration) player.currentTime=player.duration*this.value/1000; seeking=false; });
+document.getElementById("rateSel").addEventListener("change",function(){ player.playbackRate=+this.value; });
+document.getElementById("volSlider").addEventListener("input",function(){ player.volume=+this.value/100; });
+
+function updateAB(){
+  document.getElementById("abLbl").textContent=(loopA!==null?fmtTime(loopA):"--")+" ~ "+(loopB!==null?fmtTime(loopB):"--");
+  document.getElementById("abToggleBtn").disabled=!(loopA!==null&&loopB!==null&&loopB>loopA);
+}
+document.getElementById("setABtn").addEventListener("click",function(){ loopA=player.currentTime; if(loopB!==null&&loopB<=loopA) loopB=null; updateAB(); });
+document.getElementById("setBBtn").addEventListener("click",function(){ loopB=player.currentTime; if(loopA!==null&&loopA>=loopB) loopA=null; updateAB(); });
+document.getElementById("abClearBtn").addEventListener("click",function(){ loopA=null; loopB=null; loopOn=false; document.getElementById("abToggleBtn").textContent="循环：关"; updateAB(); });
+document.getElementById("abToggleBtn").addEventListener("click",function(){
+  loopOn=!loopOn; this.textContent="循环："+(loopOn?"开":"关");
+  if(loopOn&&loopA!==null) player.currentTime=loopA;
+});
+
+/* ================= 麦克风与陪练 ================= */
+let audioCtx=null, mediaStream=null, processor=null, startTime=0;
+const micBtn=document.getElementById("micBtn"), coachBtn=document.getElementById("coachBtn"), shotBtn=document.getElementById("shotBtn");
+const alertBox=document.getElementById("alertBox");
+function showAlert(msg){ if(msg){ alertBox.textContent=msg; alertBox.style.display="block"; } else alertBox.style.display="none"; }
+
+async function startMic(){
+  showAlert(null);
+  try{
+    mediaStream=await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false } });
+    const Ctx=window.AudioContext||window.webkitAudioContext;
+    audioCtx=new Ctx(); await audioCtx.resume();
+    const src=audioCtx.createMediaStreamSource(mediaStream);
+    processor=audioCtx.createScriptProcessor(4096,1,1);
+    const buf=new Float32Array(4096); startTime=audioCtx.currentTime;
+    processor.onaudioprocess=function(e){
+      const input=e.inputBuffer.getChannelData(0); buf.set(input);
+      let rms=0; for(let i=0;i<buf.length;i++) rms+=buf[i]*buf[i]; rms=Math.sqrt(rms/buf.length);
+      const t=audioCtx.currentTime-startTime;
+      const freq=detectPitch(buf,audioCtx.sampleRate);
+      const co=freq?centsOff(freq):null;
+      onFrame({ t, freq, midi:co?co.midi:null, cents:co?co.cents:null, rms });
+    };
+    src.connect(processor); processor.connect(audioCtx.destination);
+    micRunning=true; micBtn.textContent="🎙 停止收音"; micBtn.classList.add("danger"); micBtn.classList.remove("primary");
+    coachBtn.disabled=false; shotBtn.disabled=false;
+  }catch(err){
+    const name=err&&err.name;
+    showAlert(name==="NotAllowedError"?"麦克风权限被拒绝。请点击浏览器地址栏的麦克风图标允许权限后重试。"
+      :name==="NotFoundError"?"未检测到麦克风设备，请接入设备后刷新页面。"
+      :"无法启动麦克风："+(err&&err.message?err.message:err));
+  }
+}
+function stopMic(){
+  if(coach.active) stopCoach();
+  if(processor){ processor.disconnect(); processor=null; }
+  if(mediaStream){ mediaStream.getTracks().forEach(function(t){t.stop();}); mediaStream=null; }
+  if(audioCtx){ audioCtx.close().catch(function(){}); audioCtx=null; }
+  micRunning=false; micBtn.textContent="🎙 开启麦克风"; micBtn.classList.remove("danger"); micBtn.classList.add("primary");
+  coachBtn.disabled=true; shotBtn.disabled=true;
+}
+micBtn.addEventListener("click",function(){ micRunning?stopMic():startMic(); });
+
+function onFrame(f){
+  ring.push(f);
+  const cutoff=f.t-40;
+  while(ring.length&&ring[0].t<cutoff) ring.shift();
+  frames.push(f); if(frames.length>600) frames=frames.slice(frames.length-600);
+  if(coach.active) coach.frames.push(f);
+  document.getElementById("roNote").textContent=f.midi!=null?midiToNote(f.midi):"—";
+  const rc=document.getElementById("roCents");
+  if(f.cents==null){ rc.textContent="—"; rc.className="value"; }
+  else{ rc.textContent=(f.cents>0?"+":"")+f.cents; rc.className="value "+(Math.abs(f.cents)<=25?"v-ok":(Math.abs(f.cents)<=50?"v-near":"v-off")); }
+}
+
+coachBtn.addEventListener("click",function(){ coach.active?stopCoach():startCoach(); });
+function findAccompSlot(){
+  if(currentSlot>=0&&slotState[currentSlot].url&&slotState[currentSlot].name.indexOf("伴奏")>=0) return currentSlot;
+  for(let i=0;i<slotState.length;i++) if(slotState[i].url&&slotState[i].name.indexOf("伴奏")>=0) return i;
+  return -1;
+}
+function startCoach(){
+  coach={ active:true, frames:[] };
+  coachBtn.textContent="■ 结束并评分"; coachBtn.classList.add("danger");
+  document.getElementById("reportBox").style.display="none";
+  document.getElementById("reportActions").style.display="none";
+  document.getElementById("scoreCard").style.display="none";
+  if(document.getElementById("accompChk").checked){
+    const ai=findAccompSlot();
+    if(ai>=0){
+      if(ai!==currentSlot) loadIntoPlayer(ai);
+      player.currentTime=0;
+      player.play().catch(function(){});
+    } else {
+      showAlert("未找到“伴奏”槽位的音频：本次清唱记录。可在第 ① 步把伴奏文件插入任一槽位并命名为含“伴奏”。");
+    }
+  }
+}
+function stopCoach(){
+  coach.active=false;
+  coachBtn.textContent="● 开始练唱记录"; coachBtn.classList.remove("danger");
+  if(!player.paused) player.pause();
+  showReport(buildReport(coach.frames));
+  showScoreCard(buildScore(coach.frames));
+}
+
+/* ================= 练唱打分 ================= */
+function buildScore(fs){
+  const valid=fs.filter(function(f){ return f.midi!==null; });
+  if(valid.length<10) return null;
+  const sc1=Math.round(valid.filter(function(f){ return f.cents!==null&&Math.abs(f.cents)<=25; }).length/valid.length*100);
+  const avgCents=Math.round(valid.reduce(function(s,f){ return s+Math.abs(f.cents===null?100:f.cents); },0)/valid.length);
+  const sc2=Math.max(0,Math.min(100,100-avgCents*2));
+  const rmss=valid.map(function(f){ return f.rms; }).sort(function(a,b){ return a-b; });
+  const med=rmss[Math.floor(rmss.length/2)]||0.05;
+  const sc3=Math.round(valid.filter(function(f){ return med>0.005&&Math.abs(f.rms-med)/med<=0.35; }).length/valid.length*100);
+  const sc4=Math.round(valid.length/(fs.length||1)*100);
+  const total=Math.round((sc1+sc2+sc3+sc4)/4);
+  const stars=total>=90?5:total>=75?4:total>=60?3:total>=40?2:1;
+  return { sc1, sc2, sc3, sc4, avgCents, med, total, stars, validN:valid.length, frameN:fs.length };
+}
+function showScoreCard(s){
+  const card=document.getElementById("scoreCard");
+  if(!s){ card.style.display="none"; return; }
+  card.style.display="block";
+  document.getElementById("scoreStars").textContent="★★★★★".slice(0,s.stars)+"☆☆☆☆☆".slice(0,5-s.stars);
+  document.getElementById("scoreTotal").textContent=s.total;
+  setScoreBar(1,s.sc1,"稳定帧 "+s.sc1+"%");
+  setScoreBar(2,s.sc2,"平均绝对偏差 "+s.avgCents+" 音分");
+  setScoreBar(3,s.sc3,"音量平稳帧占比 "+s.sc3+"%");
+  setScoreBar(4,s.sc4,"有效检测 "+s.validN+" / 总帧 "+s.frameN);
+}
+function setScoreBar(i,sc,sub){
+  document.getElementById("sc"+i).textContent=sc+" 分";
+  const bar=document.getElementById("bar"+i);
+  bar.style.width=sc+"%";
+  bar.className=sc>=80?"":(sc>=60?"mid":"low");
+  document.getElementById("sc"+i+"sub").textContent=sub;
+}
+
+function buildReport(fs){
+  const valid=fs.filter(function(f){ return f.midi!==null; });
+  const lines=["【练唱报告】（AI 草稿）"];
+  if(valid.length<10){ lines.push("有效演唱数据不足（可能声音太小或未演唱），请靠近麦克风、音量稍大再试一次。"); return lines.join("\n"); }
+  const stable=valid.filter(function(f){ return f.cents!==null&&Math.abs(f.cents)<=25; });
+  const stableRate=Math.round(stable.length/valid.length*100);
+  const avgCents=Math.round(valid.reduce(function(s,f){ return s+Math.abs(f.cents===null?100:f.cents); },0)/valid.length);
+  const midis=valid.map(function(f){ return f.midi; });
+  const lo=Math.min.apply(null,midis), hi=Math.max.apply(null,midis);
+  const t0=valid[0].t, t1=valid[valid.length-1].t;
+  lines.push("演唱时长：约 "+Math.round(t1-t0)+" 秒 ｜ 有效检测 "+valid.length+" 帧");
+  lines.push("音域："+midiToNote(lo)+" ~ "+midiToNote(hi)+(hi-lo>=12?"（跨 "+Math.floor((hi-lo)/12)+" 个八度以上，注意换声区统一）":"（音域适中）"));
+  lines.push("音准稳定率："+stableRate+"%（±25 音分内）｜ 平均绝对偏差："+avgCents+" 音分");
+  const sc=buildScore(fs);
+  if(sc) lines.push("练唱打分："+sc.total+" / 100（"+sc.stars+" 星）｜ 音准 "+sc.sc1+" · 精度 "+sc.sc2+" · 音量均匀 "+sc.sc3+" · 完整度 "+sc.sc4);
+  lines.push("总评："+(stableRate>=80&&avgCents<=20?"优秀！气息支撑稳定，音准在线，可以挑战完整表演。"
+    :stableRate>=60?"良好。主干已经立住，把注意力放在长音和换气的稳定上。"
+    :"完成度已有基础。建议先用哼鸣慢速练，对照曲线把最不稳的一小节打磨 3 遍。"));
+  if(stableRate<80) lines.push("建议：把最难的乐句用播放器的 A-B 循环设区间，0.75 倍速练 3 遍后再测一次。");
+  lines.push("本报告由本机规则依据练唱数据生成，仅作自评参考——AI 是助手，判断在人。");
+  return lines.join("\n");
+}
+function showReport(text){
+  const box=document.getElementById("reportBox");
+  box.textContent=text; box.style.display="block";
+  document.getElementById("reportActions").style.display="flex";
+}
+document.getElementById("copyReportBtn").addEventListener("click",function(){
+  navigator.clipboard.writeText(document.getElementById("reportBox").textContent).catch(function(){});
+});
+shotBtn.addEventListener("click",function(){
+  const a=document.createElement("a");
+  a.href=chart.toDataURL("image/png");
+  a.download="练唱曲线-"+new Date().toTimeString().slice(0,8).replace(/:/g,"")+".png";
+  a.click();
+});
+document.getElementById("winSlider").addEventListener("input",function(){ windowSec=+this.value; document.getElementById("winOut").textContent=windowSec+"s"; });
+
+/* ================= 画布 ================= */
+const chart=document.getElementById("chart");
+function draw(){
+  const ctx=chart.getContext("2d");
+  const dpr=window.devicePixelRatio||1;
+  const w=chart.clientWidth, h=chart.clientHeight;
+  if(chart.width!==w*dpr||chart.height!==h*dpr){ chart.width=w*dpr; chart.height=h*dpr; }
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+  const lo=48, hi=84;
+  const my=function(m){ return h-((m-lo)/(hi-lo))*h; };
+  const end=frames.length?frames[frames.length-1].t:0;
+  const x=function(t){ return w-((end-t)/windowSec)*w; };
+  ctx.font="11px sans-serif";
+  for(let m=lo;m<=hi;m++){
+    const isC=((m%12)+12)%12===0;
+    ctx.strokeStyle=isC?GRID_S:GRID_L; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(0,my(m)); ctx.lineTo(w,my(m)); ctx.stroke();
+    if(isC){ ctx.fillStyle=dark?"#94a3b8":"#64748b"; ctx.fillText(midiToNote(m),4,my(m)-3); }
+  }
+  if(frames.length){
+    ctx.lineWidth=3;
+    let lastX=-1,lastY=0,lastColor="";
+    for(const f of frames){
+      const fx=x(f.t);
+      if(fx<-20) continue; if(fx>w+20) break;
+      if(f.midi===null){ lastX=-1; continue; }
+      const y=my(f.midi);
+      const c=f.cents===null?COLORS.off:(Math.abs(f.cents)<=25?COLORS.ok:(Math.abs(f.cents)<=50?COLORS.near:COLORS.off));
+      if(lastX>=0){ ctx.strokeStyle=lastColor; ctx.beginPath(); ctx.moveTo(lastX,lastY); ctx.lineTo(fx,y); ctx.stroke(); }
+      lastX=fx; lastY=y; lastColor=c;
+    }
+  }
+  requestAnimationFrame(draw);
+}
+document.getElementById("darkSwitch").addEventListener("change",function(){
+  dark=this.checked; document.body.classList.toggle("dark",dark);
+  GRID_L=dark?"rgba(148,163,184,0.15)":"rgba(120,140,160,0.18)";
+  GRID_S=dark?"rgba(148,163,184,0.30)":"rgba(120,140,160,0.35)";
+});
+
+/* ================= 任务卡 ================= */
+const tasksEl=document.getElementById("tasks");
+function renderTasks(){
+  tasksEl.innerHTML="";
+  slotState.forEach(function(st, i){
+    const div=document.createElement("div");
+    div.innerHTML='<div class="t-head">📝 '+st.name+'</div>';
+    const ta=document.createElement("textarea");
+    ta.rows=5; ta.dataset.i=i; ta.value=DEFAULT_SLOTS[i].task;
+    div.appendChild(ta); tasksEl.appendChild(div);
+  });
+}
+renderTasks();
+document.getElementById("exportTasksBtn").addEventListener("click",function(){
+  const tas=[...tasksEl.querySelectorAll("textarea")];
+  let out="歌唱课学习任务单　导出时间："+new Date().toLocaleString()+"\n\n";
+  slotState.forEach(function(st, i){ out+="■ "+st.name+"（音频："+(st.file||"未插入")+"）\n"+tas[i].value+"\n\n"; });
+  const blob=new Blob(["\uFEFF"+out],{ type:"text/plain;charset=utf-8" });
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob); a.download="歌唱课学习任务单.txt"; a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+requestAnimationFrame(draw);
+window.addEventListener("beforeunload",function(){ if(micRunning) stopMic(); });
+</script>
+</body>
+</html>
